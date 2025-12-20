@@ -79,7 +79,10 @@ class Permian2019DataModule(pl.LightningDataModule):
         self.training_size_overlap = self.settings.dataset.training_size_overlap
         self.root_folder = self.settings.dataset.root_folder
         self.train_csv = self.settings.dataset.train_csv
-        self.test_csv = "test.csv"
+
+        # Support separate validation set (defaults to test.csv for backward compatibility)
+        self.val_csv = self.settings.dataset.get('val_csv', 'test.csv')
+        self.test_csv = self.settings.dataset.get('test_csv', 'test.csv')
         
         if self.settings.dataset.use_weight_loss:
             self.weight_loss = self.settings.dataset.weight_loss
@@ -216,7 +219,26 @@ class Permian2019DataModule(pl.LightningDataModule):
                                                               window_size_sample=None)
         
 
-        # Process test dataframe
+        # Process validation dataframe (FIXED: separate from test set!)
+        val_dataset_path = os.path.join(self.root_folder, self.val_csv)
+        val_dataframe = self.load_dataframe(val_dataset_path)
+        val_dataframe = val_dataframe.sort_values(["has_plume","qplume"],ascending=False)
+
+        if len(self.features_extract) > 0:
+            feature_extration.extract_features(self.features_extract, val_dataframe)
+
+        self.val_dataset = dataset.STARCOPDataset(val_dataframe,
+                                                  input_products=self.input_products,
+                                                  weight_loss=self.weight_loss,
+                                                  output_products=self.output_products)
+
+        self.val_dataset_plot = dataset.STARCOPDataset(val_dataframe,
+                                                       input_products=self.input_products,
+                                                       weight_loss=self.weight_loss,
+                                                       output_products=self.output_products)
+
+        # Process test dataframe (FIXED: separate from validation set!)
+        test_dataset_path = os.path.join(self.root_folder, self.test_csv)
         test_dataframe = self.load_dataframe(test_dataset_path)
         test_dataframe = test_dataframe.sort_values(["has_plume","qplume"],ascending=False)
 
@@ -227,22 +249,22 @@ class Permian2019DataModule(pl.LightningDataModule):
                                                    input_products=self.input_products,
                                                    weight_loss=self.weight_loss,
                                                    output_products=self.output_products)
-        
+
         self.test_dataset_plot = dataset.STARCOPDataset(test_dataframe,
                                                         input_products=self.input_products,
                                                         weight_loss=self.weight_loss,
                                                         output_products=self.output_products)
-        
+
         if "rgb_aviris" in self.products_plot and not all(b in self.input_products for b in ["TOA_AVIRIS_640nm", "TOA_AVIRIS_550nm", "TOA_AVIRIS_460nm"]):
             self.train_dataset_plot.add_rgb_aviris = True
+            self.val_dataset_plot.add_rgb_aviris = True
             self.test_dataset_plot.add_rgb_aviris = True
-            
-        
+
+
         if "mag1c" in self.products_plot and "mag1c" not in self.input_products:
             self.train_dataset_plot.add_extra_products(["mag1c"])
+            self.val_dataset_plot.add_extra_products(["mag1c"])
             self.test_dataset_plot.add_extra_products(["mag1c"])
-
-        self.val_dataset = self.test_dataset
         log.info("Data module ready")
         log.info(f"Input products: {self.input_products} Output products: {self.output_products} Weight loss: {self.weight_loss}")
         log.info(f"Train dataset {len(self.train_dataset)} chipsize: {self.training_size}")
@@ -261,12 +283,21 @@ class Permian2019DataModule(pl.LightningDataModule):
         else:
             weight_random_sampler = None
             shuffle = True
-        
+
         return DataLoader(self.train_dataset_plot, batch_size=batch_size,
                           num_workers=num_workers, sampler=weight_random_sampler,
                           shuffle=shuffle)
+
+    def train_non_tiled_dataloader(self, batch_size:int=1, num_workers:int=0):
+        """Dataloader for FULL IMAGES (not tiled patches) - use for final evaluation"""
+        return DataLoader(self.train_dataset_non_tiled, batch_size=batch_size,
+                          shuffle=False, num_workers=num_workers)
     
-    def test_plot_dataloader(self, batch_size:int,num_workers:int=0):
+    def val_plot_dataloader(self, batch_size:int, num_workers:int=0):
+        return DataLoader(self.val_dataset_plot, batch_size=batch_size,
+                          shuffle=False, num_workers=num_workers)
+
+    def test_plot_dataloader(self, batch_size:int, num_workers:int=0):
         return DataLoader(self.test_dataset_plot, batch_size=batch_size,
                           shuffle=False, num_workers=num_workers)
 

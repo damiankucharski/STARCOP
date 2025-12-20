@@ -42,7 +42,7 @@ def run_validation(model:ModelModule, dataloader:DataLoader,
     thresholds = thresholds[-1::-1]
     confusion_metric_thresholds = []
     for thr in thresholds:
-        cm_thr = torchmetrics.ConfusionMatrix(num_classes=2)
+        cm_thr = torchmetrics.ConfusionMatrix(task="binary", num_classes=2)
         cm_thr.to(model.device)
         confusion_metric_thresholds.append({"confusion_matrix": cm_thr,
                                             "threshold": thr})
@@ -64,12 +64,12 @@ def run_validation(model:ModelModule, dataloader:DataLoader,
                     dataloader.dataset.add_rgb_aviris = True
                 
 
-    confusion_metric = torchmetrics.ConfusionMatrix(num_classes=2)
+    confusion_metric = torchmetrics.ConfusionMatrix(task="binary", num_classes=2)
     model.eval()
     
     confusion_metric.to(model.device)
 
-    if path_save_results.startswith("gs://"):
+    if path_save_results is not None and path_save_results.startswith("gs://"):
         path_save_results_temp = tempfile.mkdtemp(prefix="starcop")
         path_save_results_remote = path_save_results
         path_save_results = path_save_results_temp
@@ -130,6 +130,7 @@ def run_validation(model:ModelModule, dataloader:DataLoader,
         metrics_iter["id"] = plume_data["id"][0]
         metrics_iter["label_pixels_plume"] = y_long[0, 0].cpu().sum().item()
         metrics_iter["has_plume"] = plume_data['has_plume'][0].item()
+        metrics_iter["qplume"] = plume_data['qplume'][0].item()  # CRITICAL: Emission rate in kg/h
         metrics_iter["pred_classification"] = plume_data['pred_classification'][0, 0].item()
         metrics_iter["pred_pixels_plume"] = plume_data['pred_binary'][0, 0].sum().item()
         out_data.append(metrics_iter)
@@ -153,10 +154,11 @@ def run_validation(model:ModelModule, dataloader:DataLoader,
             plt.close()
 
     out_data = pd.DataFrame(out_data).set_index("id")
-    
-    # Compute metrics by difficulty
+
+    # Compute metrics by difficulty (FIXED: use qplume, not pixel count!)
+    # Paper definition: "plumes with emission rate larger than 1000 kg/h are easy/strong"
     out_data["has_plume"] = out_data["label_pixels_plume"] > 0
-    out_data["difficulty"] = out_data["label_pixels_plume"].apply(lambda x: "easy" if x > 1000 else "hard")
+    out_data["difficulty"] = out_data["qplume"].apply(lambda x: "easy" if x > 1000 else "hard")
     
     metrics_by_difficulty = out_data.groupby(["has_plume","difficulty"])[["TP","FP","TN","FN"]].sum()
     metrics_by_difficulty["total"] = metrics_by_difficulty.sum(axis=1)
@@ -184,7 +186,7 @@ def run_validation(model:ModelModule, dataloader:DataLoader,
     metrics["confusion_matrix"] = cm
 
     # Compute classification metrics
-    cm_classification_metric = torchmetrics.ConfusionMatrix(num_classes=2)
+    cm_classification_metric = torchmetrics.ConfusionMatrix(task="binary", num_classes=2)
     cm_classification_metric(torch.from_numpy(out_data["pred_classification"].values).long(),
                              torch.from_numpy(out_data["has_plume"].values).long())
     cm_classification = cm_classification_metric.compute()

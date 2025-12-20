@@ -95,9 +95,14 @@ class STARCOPDataset(Dataset):
             out_list_aug = self.spatial_augmentations(*out_list)
             out_dict = {k:v for k,v in zip(names_outputs, out_list_aug)}
 
-        # Add id and has_plume
+        # Add metadata (CRITICAL: needed for correct validation metrics)
         out_dict["id"] = str(data_iter.name)
         out_dict["has_plume"] = int(data_iter.has_plume)
+        out_dict["qplume"] = float(data_iter.qplume)  # Emission rate in kg/h
+
+        # Add optional metadata if available
+        if hasattr(data_iter, 'date'):
+            out_dict["date"] = str(data_iter.date)
 
         return out_dict
 

@@ -1,0 +1,55 @@
+[project]
+name = "starcop"
+version = "0.1.0"
+description = "Semantic segmentation of methane plumes with hyperspectral machine learning models"
+channels = ["pytorch", "conda-forge"]
+platforms = ["linux-64"]
+
+[tasks]
+train = "python -m scripts.train"
+train-easy = "python -m scripts.train dataset.train_csv=train_easy.csv experiment_name=easy_test"
+
+[dependencies]
+python = "3.10.*"
+
+# PyTorch ecosystem - use modern versions
+pytorch = ">=2.0"
+torchvision = "*"
+pytorch-cuda = "12.4"
+
+# Core ML dependencies
+pytorch-lightning = ">=2.0"
+torchmetrics = "*"
+
+# Hydra for config
+hydra-core = "*"
+omegaconf = "*"
+
+# Geospatial
+rasterio = "*"
+geopandas = "*"
+
+# Visualization
+matplotlib = "*"
+ipython = "*"
+ipykernel = "*"
+
+# ML utilities
+scikit-image = "*"
+scikit-learn = "*"
+numpy = "*"
+pandas = "*"
+
+# Cloud storage
+fsspec = "*"
+gcsfs = "*"
+
+[pypi-dependencies]
+# These are better installed via pip
+segmentation-models-pytorch = "*"
+kornia = "*"
+wandb = "*"
+georeader-spaceml = "*"
+
+# Install the package itself in editable mode
+starcop = { path = ".", editable = true }

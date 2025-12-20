@@ -144,8 +144,8 @@ class ModelModule(pl.LightningModule):
     def test_step(self, batch, batch_idx: int) :
         return self.val_step(batch, batch_idx, prefix="test")
 
-    def val_epoch_end(self, outputs, prefix):
-        outs = {}
+    def _compute_epoch_metrics(self, prefix):
+        """Compute and log epoch-level metrics from confusion matrices."""
         cm = self.confusion_matrix.compute()
 
         for fun in metrics.METRICS_CONFUSION_MATRIX:
@@ -161,13 +161,11 @@ class ModelModule(pl.LightningModule):
 
             self.classification_confusion_matrix.reset()
 
-        return outs
-    
-    def validation_epoch_end(self, outputs) -> None:
-        self.val_epoch_end(outputs, prefix="val")
+    def on_validation_epoch_end(self) -> None:
+        self._compute_epoch_metrics(prefix="val")
 
-    def test_epoch_end(self, outputs) -> None:
-        self.val_epoch_end(outputs, prefix="test")
+    def on_test_epoch_end(self) -> None:
+        self._compute_epoch_metrics(prefix="test")
 
     def configure_optimizers(self):
         if self.settings_model.optimizer == "adam":

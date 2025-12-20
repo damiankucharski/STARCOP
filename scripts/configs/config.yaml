@@ -1,18 +1,36 @@
+# ================================================================================
+# STARCOP Training Configuration
+# ================================================================================
+# This config supports two methodologies (selected automatically based on settings):
+#
+# 1. ORIGINAL METHODOLOGY (train/test only):
+#    - Set dataset.val_csv and dataset.test_csv to null
+#    - Uses original train/test split
+#    - Test set used for both validation during training and final evaluation
+#
+# 2. HYPERSTARCOP METHODOLOGY (proper train/val/test):
+#    - Set dataset.train_csv, dataset.val_csv, and dataset.test_csv
+#    - Proper separation: train → val (early stopping) → test (final eval)
+#    - Recommended for ensemble learning and fair model comparison
+#
+# To switch methodologies, simply set the CSV fields below!
+# ================================================================================
+
 experiment_name: "starcop_run"
 seed: None # Pytorch Lightning global seed, for reproducibility
 
 resume_from_checkpoint: False # Load weights from a checkpoint before training
 
 wandb:
-  wandb_project: "your_wandb_project"
-  wandb_entity: "your_wandb_entity"
+  wandb_project: "starcop"
+  wandb_entity: "phd-dk"
 
   images_logging: "wandb" # local or wandb
   # images_logging: "local" # local or wandb
 
 dataloader:
   batch_size: 32 # 32 # batch size for train, test and val dataloaders, influences the number of batches per epoch, the 'train_log_every_n_steps' should be set accordingly
-  num_workers: 4 # number of workers for the dataloader, should be set to the number of CPUs on the machine
+  num_workers: 16 # number of workers for the dataloader, should be set to the number of CPUs on the machine
 
 products_plot: ["rgb_aviris", "mag1c", "label", "pred", "differences"]
 plot_samples: 8 # how many samples from the batch to select (note: should be less than the batch size)
@@ -25,8 +43,18 @@ dataset:
   training_size: [128, 128]
   training_size_overlap: [64, 64]
   weight_sampling: True
-  root_folder: "/Permian/dataset" # Replace with your own!
-  train_csv: "train.csv" # train.csv for the full dataset path relative to root_folder
+  root_folder: ${oc.env:STARCOP_DATA_ROOT,/home/s/Data/STARCOP} # Replace with your own!
+
+  # Dataset CSV files
+  train_csv: "train.csv" # Training set (path relative to root_folder)
+
+  # Optional: For proper train/val/test separation (HyperSTARCOP methodology)
+  # If both val_csv and test_csv are specified, the script will:
+  # - Use val_csv for validation during training (early stopping)
+  # - Use test_csv only for final evaluation
+  # If not specified, uses original methodology (train/test split only)
+  val_csv: null  # Set to "okapi_fusion.csv" for HyperSTARCOP
+  test_csv: null  # Set to "test.csv" for HyperSTARCOP
 
 model:
   train: True # if in train model, we start from scratch, except for when we set 'resume_from_checkpoint'
@@ -40,7 +68,7 @@ model:
   
   num_classes: 1
   optimizer: "adam"
-  lr: 0.0001
+  lr: 0.001  # Paper uses 0.001 (was 0.0001)
   lr_decay: 0.5
   lr_patience: 4
 
@@ -48,18 +76,20 @@ model:
 
   # A weight of positive examples. Must be a vector with length equal to the number of classes.
   # pos_weight > 1 increases the recall pos_weight < 1 increases the precision
-  pos_weight: 15
+  # HyperSTARCOP (mag1c+RGB): pos_weight=1 with mag1c weighting
+  # MultiSTARCOP (WV3 ratios): pos_weight=15 without mag1c weighting
+  pos_weight: 1  # Changed from 15 for HyperSTARCOP paper reproduction
   early_stopping_patience: 8
 
 
 training:
   accelerator: gpu
   devices: 1
-  max_epochs: 15 # number of epochs
+  max_epochs: 15 # Number of epochs (paper uses 15, set to 1 for quick testing)
 
   # Pass a float in the range [0.0, 1.0] to check after a fraction of the training epoch. Pass an int to check after a fixed number of training batches. An int value can only be higher than the number of training batches when
-  val_check_interval: .5 # Run validation every XX steps or frac epochs
-  train_log_every_n_steps: 10 # trigger logging after every x batches - for small amount of training batches (caused by large batch size) set it smaller too
+  val_check_interval: 0.5 # Run validation every 0.5 epochs (twice per epoch)
+  train_log_every_n_steps: 10 # Trigger logging after every x batches
 
 hydra:
   job:

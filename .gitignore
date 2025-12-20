@@ -95,3 +95,10 @@ notebooks/data
 # Logs
 starcop/lightning_logs
 starcop/wandb
+
+# Experiments
+
+experiments
+wandb
+
+
