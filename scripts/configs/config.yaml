@@ -79,7 +79,30 @@ model:
   # HyperSTARCOP (mag1c+RGB): pos_weight=1 with mag1c weighting
   # MultiSTARCOP (WV3 ratios): pos_weight=15 without mag1c weighting
   pos_weight: 1  # Changed from 15 for HyperSTARCOP paper reproduction
+
+  # Additional loss function parameters (for heterogeneous ensemble)
+  # Dice loss
+  dice_smooth: 1.0
+
+  # Tversky loss
+  tversky_alpha: 0.5   # FP weight (0.3 = recall-focused, 0.7 = precision-focused)
+  tversky_beta: 0.5    # FN weight
+  tversky_smooth: 1.0
+
+  # Focal loss
+  focal_alpha: 0.25    # Class weight
+  focal_gamma: 2.0     # Focusing parameter
+
+  # BCE+Dice combo loss
+  bce_dice_bce_weight: 0.5
+  bce_dice_dice_weight: 0.5
+
   early_stopping_patience: 8
+
+  # Model selection metric for checkpoint saving
+  # Options: val_f1score (default), val_f05score (precision), val_f2score (recall),
+  #          val_precision, val_recall, val_loss
+  selection_metric: val_f1score
 
 
 training:

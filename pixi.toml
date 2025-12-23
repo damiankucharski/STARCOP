@@ -48,7 +48,7 @@ gcsfs = "*"
 # These are better installed via pip
 segmentation-models-pytorch = "*"
 kornia = "*"
-wandb = "*"
+wandb = "==0.22.0"  # Pinned to avoid 0.23.1 artifact upload bug
 georeader-spaceml = "*"
 
 # Install the package itself in editable mode

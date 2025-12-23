@@ -1,0 +1,96 @@
+# BCE Precision-Focused Configuration
+# Uses standard BCE loss with F0.5 selection metric to focus on precision
+#
+# IMPORTANT: pos_weight affects TRAINING, selection_metric affects MODEL SELECTION
+# - pos_weight < 1: Weights negatives more → model predicts almost nothing (BAD!)
+# - pos_weight = 1: Balanced training
+# - pos_weight > 1: Weights positives more → higher recall during training
+#
+# For precision focus, we use selection_metric: val_f05score
+# This selects the checkpoint with best precision-weighted F-score
+
+experiment_name: "bce_precision_specialist"
+seed: 42
+
+resume_from_checkpoint: False
+
+wandb:
+  wandb_project: "STARCOP"
+  wandb_entity: "phd-dk"
+  images_logging: "wandb"
+
+dataloader:
+  batch_size: 32
+  num_workers: 16
+
+products_plot: ["rgb_aviris", "mag1c", "label", "pred", "differences"]
+plot_samples: 8
+
+dataset:
+  # Input: mag1c + RGB (HyperSTARCOP configuration)
+  input_products:
+    ["mag1c", "TOA_AVIRIS_640nm", "TOA_AVIRIS_550nm", "TOA_AVIRIS_460nm"]
+  output_products: ["labelbinary"]
+
+  # mag1c weighting (HyperSTARCOP uses mag1c-weighted loss)
+  use_weight_loss: True
+  weight_loss: "weight_mag1c"
+
+  # Training parameters
+  training_size: [128, 128]
+  training_size_overlap: [64, 64]
+  weight_sampling: True
+
+  # Same datasets as baseline for fair comparison
+  root_folder: ${oc.env:STARCOP_DATA_ROOT,/home/s/Data/STARCOP}
+  train_csv: "train_without_okapi.csv" # Training set (no OKAPI samples)
+  val_csv: "okapi_fusion.csv" # Validation set for early stopping
+  test_csv: "test.csv" # Test set (final evaluation only)
+
+model:
+  train: True
+  test: False
+
+  model_mode: "segmentation_output"
+  model_type: "unet_semseg"
+  semseg_backbone: "mobilenet_v2" # Paper uses MobileNetV2
+
+  num_classes: 1
+  optimizer: "adam"
+
+  # Hyperparameters (same as baseline)
+  lr: 0.001 # Paper value
+  lr_decay: 0.5
+  lr_patience: 4
+
+  # BCE LOSS with standard pos_weight
+  # Precision focus is achieved via selection_metric, not pos_weight
+  loss: "BCEWithLogitsLoss"
+  pos_weight: 1 # Standard balanced training
+
+  # Early stopping
+  early_stopping_patience: 8
+
+  # Model selection: F0.5 for precision-focused models (weights precision 2x over recall)
+  selection_metric: val_f05score
+
+training:
+  accelerator: gpu
+  devices: 1
+  max_epochs: 15
+
+  val_check_interval: 0.5 # Validate twice per epoch
+  train_log_every_n_steps: 10
+
+hydra:
+  job:
+    chdir: True
+    config:
+      override_dirname:
+        exclude_keys:
+          - experiment_name
+  run:
+    dir: experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M}
+  sweep:
+    dir: experiments
+    subdir: ${hydra.job.override_dirname}/${now:%Y-%m-%d_%H-%M}

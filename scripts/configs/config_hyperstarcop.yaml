@@ -59,8 +59,35 @@ model:
   pos_weight: 1       # HyperSTARCOP uses pos_weight=1 (NOT 15!)
                      # mag1c weighting is applied via weight_loss parameter above
 
+  # Additional loss function parameters (for heterogeneous ensemble)
+  # Dice loss
+  dice_smooth: 1.0
+
+  # Tversky loss (F-beta equivalent: α=1/(1+β²), β_t=β²/(1+β²))
+  # F0.5 (precision): α=0.8, β=0.2 | F1 (balanced): α=0.5, β=0.5 | F2 (recall): α=0.2, β=0.8
+  tversky_alpha: 0.5   # Default: F1 equivalent (balanced)
+  tversky_beta: 0.5
+  tversky_smooth: 1.0
+
+  # Focal loss
+  focal_alpha: 0.25    # Class weight
+  focal_gamma: 2.0     # Focusing parameter
+
+  # BCE+Dice combo loss
+  bce_dice_bce_weight: 0.5
+  bce_dice_dice_weight: 0.5
+
   # Early stopping
   early_stopping_patience: 8
+
+  # Model selection metric for checkpoint saving
+  # Options: val_f1score (balanced), val_f05score (precision-focused), val_f2score (recall-focused),
+  #          val_precision, val_recall, val_loss
+  # Recommendation:
+  #   - Balanced models (BCE, Dice): val_f1score
+  #   - Precision-focused (Tversky α>0.5, Focal α<0.5): val_f05score
+  #   - Recall-focused (Tversky α<0.5, Focal α>0.5): val_f2score
+  selection_metric: val_f1score
 
 training:
   accelerator: gpu

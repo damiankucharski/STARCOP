@@ -34,6 +34,26 @@ def f1score(cm:Tensor) -> float:
     rec = recall(cm)
     return 2 * (prec * rec) / (prec + rec)
 
+def fbeta_score(cm:Tensor, beta:float) -> float:
+    """F-beta score: weights precision vs recall.
+
+    beta < 1: precision-focused (F0.5 weights precision 2x)
+    beta = 1: balanced (F1)
+    beta > 1: recall-focused (F2 weights recall 2x)
+    """
+    prec = precision(cm)
+    rec = recall(cm)
+    beta_sq = beta ** 2
+    return (1 + beta_sq) * (prec * rec) / (beta_sq * prec + rec)
+
+def f05score(cm:Tensor) -> float:
+    """F0.5 score: precision-focused (weights precision 2x over recall)."""
+    return fbeta_score(cm, beta=0.5)
+
+def f2score(cm:Tensor) -> float:
+    """F2 score: recall-focused (weights recall 2x over precision)."""
+    return fbeta_score(cm, beta=2.0)
+
 def FPR(cm:Tensor) -> float:
     """ FP / (FP + TN)"""
     return cm[0, 1] / (cm[0, 1] + cm[0, 0])
@@ -82,5 +102,5 @@ def FP(cm:Tensor) -> float:
 def FN(cm:Tensor) -> float:
     return cm[1, 0]
 
-METRICS_CONFUSION_MATRIX = [precision, recall, f1score, iou, accuracy, cohen_kappa, balanced_accuracy]
+METRICS_CONFUSION_MATRIX = [precision, recall, f1score, f05score, f2score, iou, accuracy, cohen_kappa, balanced_accuracy]
 

@@ -44,6 +44,10 @@ class ModelModule(pl.LightningModule):
         self.loss_name = self.settings_model.loss
 
         use_weight_loss = "use_weight_loss" not in settings.dataset or settings.dataset.use_weight_loss
+
+        # Default reduction (can be overridden by specific losses)
+        self.reduction = "mean"
+
         if self.settings_model.loss == 'l1':
             self.loss_function = losses.l1
             self.loss_name = "l1_loss"
@@ -56,6 +60,35 @@ class ModelModule(pl.LightningModule):
                                                  requires_grad=False)
             self.loss_function = torch.nn.BCEWithLogitsLoss(pos_weight=self.pos_weight,
                                                             reduction=self.reduction)
+        elif self.settings_model.loss == 'dice':
+            dice_smooth = getattr(self.settings_model, 'dice_smooth', 1.0)
+            self.loss_function = losses.DiceLoss(smooth=dice_smooth)
+            self.loss_name = "dice_loss"
+        elif self.settings_model.loss == 'tversky':
+            tversky_alpha = getattr(self.settings_model, 'tversky_alpha', 0.5)
+            tversky_beta = getattr(self.settings_model, 'tversky_beta', 0.5)
+            tversky_smooth = getattr(self.settings_model, 'tversky_smooth', 1.0)
+            self.loss_function = losses.TverskyLoss(
+                alpha=tversky_alpha,
+                beta=tversky_beta,
+                smooth=tversky_smooth
+            )
+            self.loss_name = "tversky_loss"
+        elif self.settings_model.loss == 'focal':
+            focal_alpha = getattr(self.settings_model, 'focal_alpha', 0.25)
+            focal_gamma = getattr(self.settings_model, 'focal_gamma', 2.0)
+            self.loss_function = losses.FocalLoss(alpha=focal_alpha, gamma=focal_gamma)
+            self.loss_name = "focal_loss"
+        elif self.settings_model.loss == 'bce_dice':
+            bce_weight = getattr(self.settings_model, 'bce_dice_bce_weight', 0.5)
+            dice_weight = getattr(self.settings_model, 'bce_dice_dice_weight', 0.5)
+            pos_weight = getattr(self.settings_model, 'pos_weight', 1.0)
+            self.loss_function = losses.BCEDiceLoss(
+                bce_weight=bce_weight,
+                dice_weight=dice_weight,
+                pos_weight=pos_weight
+            )
+            self.loss_name = "bce_dice_loss"
 
         # Configure metrics based on settings_model.model_mode: "segmentation_output" # regression_output
         if self.settings_model.model_mode == "segmentation_output":

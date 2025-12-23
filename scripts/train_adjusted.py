@@ -91,7 +91,7 @@ def train(settings: DictConfig) -> None:
         name=settings.experiment_name,
         project=settings.wandb.wandb_project,
         entity=settings.wandb.wandb_entity,
-        log_model=True,  # Auto-save best checkpoint
+        log_model=False,  # Auto-save best checkpoint
     )
     wandb_logger.experiment.config.update(OmegaConf.to_container(settings, resolve=True))
 
@@ -125,29 +125,70 @@ def train(settings: DictConfig) -> None:
     log.info(f"Backbone: {settings.model.semseg_backbone}")
     log.info(f"Loss: {settings.model.loss}")
     log.info(f"Learning rate: {settings.model.lr}")
-    log.info(f"Pos weight: {settings.model.pos_weight}")
+
+    # Log loss-specific parameters
+    if settings.model.loss == 'BCEWithLogitsLoss':
+        if hasattr(settings.model, 'pos_weight'):
+            log.info(f"  Loss param - pos_weight: {settings.model.pos_weight}")
+    elif settings.model.loss == 'dice':
+        if hasattr(settings.model, 'dice_smooth'):
+            log.info(f"  Loss param - dice_smooth: {settings.model.dice_smooth}")
+    elif settings.model.loss == 'tversky':
+        if hasattr(settings.model, 'tversky_alpha'):
+            log.info(f"  Loss param - tversky_alpha: {settings.model.tversky_alpha}")
+        if hasattr(settings.model, 'tversky_beta'):
+            log.info(f"  Loss param - tversky_beta: {settings.model.tversky_beta}")
+        if hasattr(settings.model, 'tversky_smooth'):
+            log.info(f"  Loss param - tversky_smooth: {settings.model.tversky_smooth}")
+    elif settings.model.loss == 'focal':
+        if hasattr(settings.model, 'focal_alpha'):
+            log.info(f"  Loss param - focal_alpha: {settings.model.focal_alpha}")
+        if hasattr(settings.model, 'focal_gamma'):
+            log.info(f"  Loss param - focal_gamma: {settings.model.focal_gamma}")
+    elif settings.model.loss == 'bce_dice':
+        if hasattr(settings.model, 'bce_dice_bce_weight'):
+            log.info(f"  Loss param - bce_dice_bce_weight: {settings.model.bce_dice_bce_weight}")
+        if hasattr(settings.model, 'bce_dice_dice_weight'):
+            log.info(f"  Loss param - bce_dice_dice_weight: {settings.model.bce_dice_dice_weight}")
+        if hasattr(settings.model, 'pos_weight'):
+            log.info(f"  Loss param - pos_weight: {settings.model.pos_weight}")
 
     # CHECKPOINTING SETUP
     log.info("\n" + "=" * 80)
     log.info("CALLBACKS SETUP")
     log.info("=" * 80)
 
-    metric_monitor = "val_loss"
+    # Model selection metric (configurable)
+    # Options: val_loss, val_f1score, val_f05score, val_f2score, val_precision, val_recall
+    selection_metric = getattr(settings.model, 'selection_metric', 'val_f1score')
+
+    # Determine mode based on metric type
+    # val_loss should be minimized, all other metrics should be maximized
+    if selection_metric == "val_loss":
+        selection_mode = "min"
+    else:
+        selection_mode = "max"
+
+    log.info(f"Selection metric: {selection_metric} (mode: {selection_mode})")
+
+    # Create filename with the selection metric
+    checkpoint_filename = f'best-{{epoch:02d}}-{{{selection_metric}:.4f}}'
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_path,
-        filename='best-{epoch:02d}-{val_loss:.4f}',
+        filename=checkpoint_filename,
         save_top_k=1,
         verbose=True,
-        monitor=metric_monitor,
-        mode="min"
+        monitor=selection_metric,
+        mode=selection_mode
     )
 
     early_stop_callback = EarlyStopping(
-        monitor=metric_monitor,
+        monitor=selection_metric,
         patience=settings.model.early_stopping_patience,
         strict=False,
         verbose=True,
-        mode="min"
+        mode=selection_mode
     )
 
     # IMAGE LOGGER SETUP
@@ -201,7 +242,7 @@ def train(settings: DictConfig) -> None:
     # LOAD BEST CHECKPOINT FOR EVALUATION
     best_checkpoint_path = checkpoint_callback.best_model_path
     log.info(f"\nLoading BEST checkpoint for evaluation: {best_checkpoint_path}")
-    log.info(f"Best val_loss: {checkpoint_callback.best_model_score:.4f}")
+    log.info(f"Best {selection_metric}: {checkpoint_callback.best_model_score:.4f}")
 
     from starcop.models.model_module import ModelModule
     model = ModelModule.load_from_checkpoint(best_checkpoint_path)
@@ -217,148 +258,151 @@ def train(settings: DictConfig) -> None:
     artifact = wandb.Artifact(
         name=f"model-{wandb_logger.experiment.name}",
         type="model",
-        description=f"Best model checkpoint (val_loss={checkpoint_callback.best_model_score:.4f})"
+        description=f"Best model checkpoint ({selection_metric}={checkpoint_callback.best_model_score:.4f})"
     )
     artifact.add_file(best_checkpoint_final)
     wandb.log_artifact(artifact)
     log.info("Best checkpoint uploaded to W&B")
 
-    # ========================================================================
-    # VALIDATION ON ALL CONFIGURED DATASETS
-    # ========================================================================
+    run_validation = True # for debugging purposes - will be removed at some point but useful for quick debug runs.
 
-    log.info("\n" + "=" * 80)
-    log.info("VALIDATION (using BEST checkpoint)")
-    log.info("=" * 80)
+    if run_validation:
+        # ========================================================================
+        # VALIDATION ON ALL CONFIGURED DATASETS
+        # ========================================================================
 
-    results_dir = Path(experiment_path) / "validation_results"
-    results_dir.mkdir(exist_ok=True)
+        log.info("\n" + "=" * 80)
+        log.info("VALIDATION (using BEST checkpoint)")
+        log.info("=" * 80)
 
-    # Helper function for safe metric formatting
-    def safe_format(metrics_dict, key):
-        val = metrics_dict.get(key)
-        return f"{val:.4f}" if val is not None else "N/A"
+        results_dir = Path(experiment_path) / "validation_results"
+        results_dir.mkdir(exist_ok=True)
 
-    def safe_format_table(val):
-        return f"{val:<10.4f}" if val is not None else f"{'N/A':<10}"
+        # Helper function for safe metric formatting
+        def safe_format(metrics_dict, key):
+            val = metrics_dict.get(key)
+            return f"{val:.4f}" if val is not None else "N/A"
 
-    # Store results for summary table
-    validation_results = {}
+        def safe_format_table(val):
+            return f"{val:<10.4f}" if val is not None else f"{'N/A':<10}"
 
-    # 1. VALIDATION ON TRAINING SET (always run)
-    log.info("\n1. Validation on TRAINING set (full images)...")
-    train_results_dir = results_dir / "train"
-    train_results_dir.mkdir(exist_ok=True)
+        # Store results for summary table
+        validation_results = {}
 
-    dataloader_train = data_module.train_non_tiled_dataloader(
-        batch_size=1,
-        num_workers=data_module.num_workers
-    )
+        # 1. VALIDATION ON TRAINING SET (always run)
+        log.info("\n1. Validation on TRAINING set (full images)...")
+        train_results_dir = results_dir / "train"
+        train_results_dir.mkdir(exist_ok=True)
 
-    results_train, metrics_train = run_validation(
-        model,
-        dataloader_train,
-        products_plot=[],  # No plots for speed
-        verbose=False,
-        show_plots=False,
-        path_save_results=str(train_results_dir),
-        skip_saving_plots=True
-    )
-
-    validation_results['train'] = {
-        'samples': len(results_train),
-        'metrics': metrics_train
-    }
-
-    log.info(f"  Samples: {len(results_train)}")
-    log.info(f"  F1_easy: {safe_format(metrics_train, 'f1score_easy')}")
-    log.info(f"  F1_hard: {safe_format(metrics_train, 'f1score_hard')}")
-    log.info(f"  Overall F1: {safe_format(metrics_train, 'f1score')}")
-
-    # 2. VALIDATION SET (only if using proper split)
-    if use_proper_split:
-        log.info("\n2. Validation on VALIDATION set...")
-        val_results_dir = results_dir / "val"
-        val_results_dir.mkdir(exist_ok=True)
-
-        dataloader_val = data_module.val_plot_dataloader(
+        dataloader_train = data_module.train_non_tiled_dataloader(
             batch_size=1,
             num_workers=data_module.num_workers
         )
 
-        results_val, metrics_val = run_validation(
+        results_train, metrics_train = run_validation(
             model,
-            dataloader_val,
+            dataloader_train,
+            products_plot=[],  # No plots for speed
+            verbose=False,
+            show_plots=False,
+            path_save_results=str(train_results_dir),
+            skip_saving_plots=True
+        )
+
+        validation_results['train'] = {
+            'samples': len(results_train),
+            'metrics': metrics_train
+        }
+
+        log.info(f"  Samples: {len(results_train)}")
+        log.info(f"  F1_easy: {safe_format(metrics_train, 'f1score_easy')}")
+        log.info(f"  F1_hard: {safe_format(metrics_train, 'f1score_hard')}")
+        log.info(f"  Overall F1: {safe_format(metrics_train, 'f1score')}")
+
+        # 2. VALIDATION SET (only if using proper split)
+        if use_proper_split:
+            log.info("\n2. Validation on VALIDATION set...")
+            val_results_dir = results_dir / "val"
+            val_results_dir.mkdir(exist_ok=True)
+
+            dataloader_val = data_module.val_plot_dataloader(
+                batch_size=1,
+                num_workers=data_module.num_workers
+            )
+
+            results_val, metrics_val = run_validation(
+                model,
+                dataloader_val,
+                products_plot=settings.products_plot,
+                verbose=False,
+                show_plots=False,
+                path_save_results=str(val_results_dir),
+                skip_saving_plots=False
+            )
+
+            validation_results['val'] = {
+                'samples': len(results_val),
+                'metrics': metrics_val
+            }
+
+            log.info(f"  Samples: {len(results_val)}")
+            log.info(f"  F1_easy: {safe_format(metrics_val, 'f1score_easy')}")
+            log.info(f"  F1_hard: {safe_format(metrics_val, 'f1score_hard')}")
+            log.info(f"  Overall F1: {safe_format(metrics_val, 'f1score')}")
+
+        # 3. TEST SET (always run)
+        log.info("\n3. Validation on TEST set...")
+        test_results_dir = results_dir / "test"
+        test_results_dir.mkdir(exist_ok=True)
+
+        dataloader_test = data_module.test_plot_dataloader(
+            batch_size=1,
+            num_workers=data_module.num_workers
+        )
+
+        results_test, metrics_test = run_validation(
+            model,
+            dataloader_test,
             products_plot=settings.products_plot,
             verbose=False,
             show_plots=False,
-            path_save_results=str(val_results_dir),
+            path_save_results=str(test_results_dir),
             skip_saving_plots=False
         )
 
-        validation_results['val'] = {
-            'samples': len(results_val),
-            'metrics': metrics_val
+        validation_results['test'] = {
+            'samples': len(results_test),
+            'metrics': metrics_test
         }
 
-        log.info(f"  Samples: {len(results_val)}")
-        log.info(f"  F1_easy: {safe_format(metrics_val, 'f1score_easy')}")
-        log.info(f"  F1_hard: {safe_format(metrics_val, 'f1score_hard')}")
-        log.info(f"  Overall F1: {safe_format(metrics_val, 'f1score')}")
+        log.info(f"  Samples: {len(results_test)}")
+        log.info(f"  F1_easy: {safe_format(metrics_test, 'f1score_easy')}")
+        log.info(f"  F1_hard: {safe_format(metrics_test, 'f1score_hard')}")
+        log.info(f"  Overall F1: {safe_format(metrics_test, 'f1score')}")
 
-    # 3. TEST SET (always run)
-    log.info("\n3. Validation on TEST set...")
-    test_results_dir = results_dir / "test"
-    test_results_dir.mkdir(exist_ok=True)
+        # SUMMARY TABLE
+        log.info("\n" + "=" * 80)
+        log.info("VALIDATION SUMMARY (BEST checkpoint)")
+        log.info("=" * 80)
+        log.info(f"{'Set':<15} {'Samples':<10} {'F1_easy':<10} {'F1_hard':<10} {'F1_overall':<10}")
+        log.info("-" * 80)
 
-    dataloader_test = data_module.test_plot_dataloader(
-        batch_size=1,
-        num_workers=data_module.num_workers
-    )
+        for set_name in validation_results:
+            result = validation_results[set_name]
+            metrics = result['metrics']
+            log.info(
+                f"{set_name.capitalize():<15} "
+                f"{result['samples']:<10} "
+                f"{safe_format_table(metrics.get('f1score_easy'))} "
+                f"{safe_format_table(metrics.get('f1score_hard'))} "
+                f"{safe_format_table(metrics.get('f1score'))}"
+            )
 
-    results_test, metrics_test = run_validation(
-        model,
-        dataloader_test,
-        products_plot=settings.products_plot,
-        verbose=False,
-        show_plots=False,
-        path_save_results=str(test_results_dir),
-        skip_saving_plots=False
-    )
+        log.info("=" * 80)
 
-    validation_results['test'] = {
-        'samples': len(results_test),
-        'metrics': metrics_test
-    }
-
-    log.info(f"  Samples: {len(results_test)}")
-    log.info(f"  F1_easy: {safe_format(metrics_test, 'f1score_easy')}")
-    log.info(f"  F1_hard: {safe_format(metrics_test, 'f1score_hard')}")
-    log.info(f"  Overall F1: {safe_format(metrics_test, 'f1score')}")
-
-    # SUMMARY TABLE
-    log.info("\n" + "=" * 80)
-    log.info("VALIDATION SUMMARY (BEST checkpoint)")
-    log.info("=" * 80)
-    log.info(f"{'Set':<15} {'Samples':<10} {'F1_easy':<10} {'F1_hard':<10} {'F1_overall':<10}")
-    log.info("-" * 80)
-
-    for set_name in validation_results:
-        result = validation_results[set_name]
-        metrics = result['metrics']
-        log.info(
-            f"{set_name.capitalize():<15} "
-            f"{result['samples']:<10} "
-            f"{safe_format_table(metrics.get('f1score_easy'))} "
-            f"{safe_format_table(metrics.get('f1score_hard'))} "
-            f"{safe_format_table(metrics.get('f1score'))}"
-        )
-
-    log.info("=" * 80)
-
-    # FINISH
-    log.info(f"\nResults saved to: {results_dir}")
-    log.info(f"Best checkpoint: {best_checkpoint_final}")
+        # FINISH
+        log.info(f"\nResults saved to: {results_dir}")
+        log.info(f"Best checkpoint: {best_checkpoint_final}")
 
     wandb.finish()
 

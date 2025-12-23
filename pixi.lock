@@ -407,9 +407,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d6/14/fc04d491527b774ec7479897f5861959209de1480e4c4cd32ed098ff8bea/timm-1.0.22-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/5e/dd/5cbf31f402f1cc0ab087c94d4669cfa55bd1e818688b910631e131d74e75/typer_slim-0.20.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d8/f9/a273c8b57c69ac1b90509ebda204972265fdc978fbbecc25980786f8c038/typer_slim-0.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/5c/ee/9a8bb9a39cc1f09c3060456cc79565110226dc4099a719af5c63432da21d/wandb-0.23.1-py3-none-manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/06/c7/93a70c6f31ea127fd1c89800e6e733e172d9eaba6a33c9e08348503df78b/wandb-0.22.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -5592,10 +5592,10 @@ packages:
   - pkg:pypi/traitlets?source=hash-mapping
   size: 110051
   timestamp: 1733367480074
-- pypi: https://files.pythonhosted.org/packages/5e/dd/5cbf31f402f1cc0ab087c94d4669cfa55bd1e818688b910631e131d74e75/typer_slim-0.20.0-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/d8/f9/a273c8b57c69ac1b90509ebda204972265fdc978fbbecc25980786f8c038/typer_slim-0.20.1-py3-none-any.whl
   name: typer-slim
-  version: 0.20.0
-  sha256: f42a9b7571a12b97dddf364745d29f12221865acef7a2680065f9bb29c7dc89d
+  version: 0.20.1
+  sha256: 8e89c5dbaffe87a4f86f4c7a9e2f7059b5b68c66f558f298969d42ce34f10122
   requires_dist:
   - click>=8.0.0
   - typing-extensions>=3.7.4.3
@@ -5689,10 +5689,10 @@ packages:
   - pkg:pypi/urllib3?source=hash-mapping
   size: 101735
   timestamp: 1750271478254
-- pypi: https://files.pythonhosted.org/packages/5c/ee/9a8bb9a39cc1f09c3060456cc79565110226dc4099a719af5c63432da21d/wandb-0.23.1-py3-none-manylinux_2_28_x86_64.whl
+- pypi: https://files.pythonhosted.org/packages/06/c7/93a70c6f31ea127fd1c89800e6e733e172d9eaba6a33c9e08348503df78b/wandb-0.22.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   name: wandb
-  version: 0.23.1
-  sha256: 67431cd3168d79fdb803e503bd669c577872ffd5dadfa86de733b3274b93088e
+  version: 0.22.0
+  sha256: 44da9a83301d89c008f608832b74237f9e0a0758b2bb6d69ba51652818fffb5e
   requires_dist:
   - click>=8.0.1
   - eval-type-backport ; python_full_version < '3.10'

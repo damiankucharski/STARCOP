@@ -101,4 +101,7 @@ starcop/wandb
 experiments
 wandb
 
+# other
 
+markdowns
+debug_wandb
